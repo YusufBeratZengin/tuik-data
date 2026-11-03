@@ -696,12 +696,15 @@ def parse_sdmx_json(doc: Mapping[str, Any] | str | bytes) -> Dataset:
         raise TuikParseError("SDMX-JSON 'structure' has no 'dimensions' object")
 
     dims: list[Dimension] = []
+    series_dim_count = 0
     for section in ("series", "observation"):
         entries = raw_dimensions.get(section)
         if entries is None:
             entries = []
         if not isinstance(entries, list):
             raise TuikParseError(f"SDMX-JSON 'dimensions.{section}' must be an array")
+        if section == "series":
+            series_dim_count = len(entries)
         for entry in entries:
             if not isinstance(entry, Mapping):
                 raise TuikParseError(f"SDMX-JSON dimension in {section!r} is not an object")
@@ -711,21 +714,27 @@ def parse_sdmx_json(doc: Mapping[str, Any] | str | bytes) -> Dataset:
                 values = []
             if not dim_id or not isinstance(values, list):
                 raise TuikParseError(f"SDMX-JSON dimension {dim_id!r} has no values")
-            category = tuple(
-                Category(
-                    code=_as_text(value.get("id", position)),
-                    label=_as_text(value.get("name", value.get("id", position))),
+            category: list[Category] = []
+            for position, value in enumerate(values):
+                # Skipping a malformed entry would renumber every later category
+                # and silently shift the whole cube, so refuse the message instead.
+                if not isinstance(value, Mapping):
+                    raise TuikParseError(
+                        f"SDMX-JSON dimension {dim_id!r} value #{position} is not an object"
+                    )
+                category.append(
+                    Category(
+                        code=_as_text(value.get("id", position)),
+                        label=_as_text(value.get("name", value.get("id", position))),
+                    )
                 )
-                for position, value in enumerate(values)
-                if isinstance(value, Mapping)
-            )
             if not category:
                 raise TuikParseError(f"SDMX-JSON dimension {dim_id!r} has no values")
             dims.append(
                 Dimension(
                     id=dim_id,
                     label=_as_text(entry.get("name", dim_id)),
-                    categories=category,
+                    categories=tuple(category),
                     role="time" if dim_id.upper() in ("TIME_PERIOD", "TIME") else None,
                 )
             )
@@ -748,8 +757,9 @@ def parse_sdmx_json(doc: Mapping[str, Any] | str | bytes) -> Dataset:
         datasets = []
     if not isinstance(datasets, list):
         raise TuikParseError("SDMX-JSON 'dataSets' must be an array")
-    n_series_dims = len(raw_dimensions.get("series") or [])
-    obs_values_dim = dims[n_series_dims] if len(dims) > n_series_dims else None
+    n_series_dims = series_dim_count
+    if len(dims) <= n_series_dims:
+        raise TuikParseError("SDMX-JSON message has no observation dimension")
 
     for dataset in datasets:
         if not isinstance(dataset, Mapping):
@@ -761,7 +771,7 @@ def parse_sdmx_json(doc: Mapping[str, Any] | str | bytes) -> Dataset:
             for key, series in series_block.items():
                 if not isinstance(series, Mapping):
                     raise TuikParseError("SDMX-JSON series entry is not an object")
-                series_coords = _parse_key(key, n_series_dims)
+                series_coords = _parse_key(key, size[:n_series_dims])
                 observations = series.get("observations")
                 if not isinstance(observations, Mapping):
                     raise TuikParseError("SDMX-JSON series has no 'observations' object")
@@ -789,9 +799,6 @@ def parse_sdmx_json(doc: Mapping[str, Any] | str | bytes) -> Dataset:
                 if flag:
                     status[obs_index] = flag
 
-    if obs_values_dim is None:  # pragma: no cover - guarded by dims check
-        raise TuikParseError("SDMX-JSON message has no observation dimension")
-
     return Dataset(
         dimensions=tuple(dims),
         values=tuple(cells),
@@ -805,16 +812,31 @@ def parse_sdmx_json(doc: Mapping[str, Any] | str | bytes) -> Dataset:
     )
 
 
-def _parse_key(key: str, expected: int) -> list[int]:
-    if expected == 0:
+def _parse_key(key: str, sizes: Sequence[int]) -> list[int]:
+    """Split an SDMX series key into coordinates and check them against ``sizes``.
+
+    SDMX keys are positional, so an out-of-range coordinate would either raise a
+    bare ``IndexError`` or - worse, when the bad coordinate is not in the leading
+    dimension - land on a different cell and corrupt the cube silently.
+    """
+    if not sizes:
         return []
     parts = key.split(":")
-    if len(parts) != expected:
-        raise TuikParseError(f"series key {key!r} has {len(parts)} parts, expected {expected}")
-    try:
-        return [int(part) for part in parts]
-    except ValueError as exc:
-        raise TuikParseError(f"series key {key!r} is not numeric") from exc
+    if len(parts) != len(sizes):
+        raise TuikParseError(f"series key {key!r} has {len(parts)} parts, expected {len(sizes)}")
+    coords: list[int] = []
+    for position, part in enumerate(parts):
+        try:
+            coord = int(part)
+        except ValueError as exc:
+            raise TuikParseError(f"series key {key!r} is not numeric") from exc
+        if not 0 <= coord < sizes[position]:
+            raise TuikParseError(
+                f"series key {key!r} coordinate {coord} is outside dimension "
+                f"{position} ({sizes[position]} values)"
+            )
+        coords.append(coord)
+    return coords
 
 
 def _as_index(key: str, limit: int) -> int:
@@ -838,19 +860,38 @@ def _sdmx_observation_status(payload: Any, structure: Mapping[str, Any]) -> str:
     raw_attributes = payload[1]
     if not isinstance(raw_attributes, list):
         return ""
-    attribute_defs = (structure.get("attributes") or {}).get("observation") or []
-    for position, flag_index in enumerate(raw_attributes):
-        if flag_index is None or position >= len(attribute_defs):
-            continue
-        definition = attribute_defs[position]
+    attributes = structure.get("attributes")
+    if not isinstance(attributes, Mapping):
+        return ""
+    attribute_defs = attributes.get("observation") or []
+    if not isinstance(attribute_defs, list):
+        return ""
+    # Positions in ``payload[1]`` align with the attribute definitions, so the
+    # OBS_STATUS definition must be located first; taking the first non-empty
+    # flag would mistake OBS_CONF/DECIMALS for the observation status.
+    for position, definition in enumerate(attribute_defs):
         if not isinstance(definition, Mapping):
             continue
-        values = definition.get("values") or []
-        if not isinstance(values, list) or not 0 <= int(flag_index) < len(values):
+        if _as_text(definition.get("id", "")).upper() != "OBS_STATUS":
             continue
-        value = values[int(flag_index)]
+        if position >= len(raw_attributes):
+            return ""
+        flag_index = raw_attributes[position]
+        if flag_index is None:
+            return ""
+        values = definition.get("values") or []
+        if not isinstance(values, list):
+            return ""
+        try:
+            resolved = int(flag_index)
+        except (TypeError, ValueError):
+            # A malformed attribute index is metadata noise, not a bad cube:
+            # skip it rather than failing the whole dataset.
+            return ""
+        if not 0 <= resolved < len(values):
+            return ""
+        value = values[resolved]
         if isinstance(value, Mapping):
-            code = _as_text(value.get("id", ""))
-            if code:
-                return code
+            return _as_text(value.get("id", ""))
+        return ""
     return ""

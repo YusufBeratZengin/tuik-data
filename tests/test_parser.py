@@ -368,6 +368,21 @@ class TestSdmxJson:
         assert sdmx_dataset.status.get(2) == "P"
         assert sdmx_dataset.status.get(0) == "A"
 
+    def test_malformed_attribute_index_is_ignored(self) -> None:
+        document = load_document("adnks_example_sdmx.json")
+        series = document["data"]["dataSets"][0]["series"]["0:0"]
+        series["observations"]["0"] = [100.0, ["not-an-index"]]
+        dataset = parse_sdmx_json(document)
+        # The value survives; only the unreadable flag is dropped.
+        assert dataset.values[0] == 100.0
+        assert 0 not in dataset.status
+
+    def test_non_mapping_attributes_block_is_ignored(self) -> None:
+        document = load_document("adnks_example_sdmx.json")
+        document["data"]["structure"]["attributes"] = [{"id": "OBS_STATUS"}]
+        dataset = parse_sdmx_json(document)
+        assert dataset.status == {}
+
     def test_time_role(self, sdmx_dataset: Dataset) -> None:
         assert sdmx_dataset.dimensions[2].role == "time"
 
@@ -402,6 +417,44 @@ class TestSdmxJson:
         document["data"]["dataSets"][0]["series"]["0:0"]["observations"]["9"] = [1, [0]]
         with pytest.raises(TuikParseError, match="outside the cube"):
             parse_sdmx_json(document)
+
+    def test_series_coordinate_out_of_range_is_rejected(self) -> None:
+        # CITIES has 2 values, SEX has 1: "0:1" would wrap into Ankara's row
+        # if the coordinate were not checked against the dimension size.
+        document = load_document("adnks_example_sdmx.json")
+        document["data"]["dataSets"][0]["series"]["0:1"] = {"observations": {"0": [1.0, [0]]}}
+        with pytest.raises(TuikParseError, match="outside dimension"):
+            parse_sdmx_json(document)
+
+    def test_non_mapping_dimension_value_is_rejected(self) -> None:
+        document = load_document("adnks_example_sdmx.json")
+        document["data"]["structure"]["dimensions"]["series"][0]["values"].append("İzmir")
+        with pytest.raises(TuikParseError, match="not an object"):
+            parse_sdmx_json(document)
+
+    def test_missing_observation_dimension_is_rejected(self) -> None:
+        document = {
+            "data": {
+                "dataSets": [],
+                "structure": {
+                    "dimensions": {"series": [{"id": "CITIES", "values": [{"id": "TR34"}]}]}
+                },
+            }
+        }
+        with pytest.raises(TuikParseError, match="observation dimension"):
+            parse_sdmx_json(document)
+
+    def test_obs_status_is_selected_by_id(self) -> None:
+        document = load_document("adnks_example_sdmx.json")
+        document["data"]["structure"]["attributes"]["observation"] = [
+            {"id": "OBS_CONF", "values": [{"id": "F"}, {"id": "N"}]},
+            {"id": "OBS_STATUS", "values": [{"id": "A"}, {"id": "P"}]},
+        ]
+        series = document["data"]["dataSets"][0]["series"]["0:0"]
+        series["observations"]["0"] = [100.0, [1, 1]]
+        dataset = parse_sdmx_json(document)
+        # The first attribute is OBS_CONF ("N"); only OBS_STATUS is the flag.
+        assert dataset.status.get(0) == "P"
 
     def test_data_sets_must_be_array(self) -> None:
         document = load_document("adnks_example_sdmx.json")

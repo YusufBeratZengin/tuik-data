@@ -26,11 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `parse_sdmx_json` skips malformed observation attribute indices and a
   non-object `structure.attributes` block instead of raising a bare `ValueError`
   / `AttributeError`; values are still decoded.
+- `parse_sdmx_json` no longer corrupts or crashes on a malformed message: a
+  series key coordinate outside its dimension, a non-object dimension value
+  (which used to renumber every later category) and a message without an
+  observation dimension now raise `TuikParseError` with the offending position.
+- SDMX observation status is resolved from the attribute whose id is
+  `OBS_STATUS`, so messages that list `OBS_CONF`/`DECIMALS` first no longer
+  report another attribute's value as the cell flag.
 
 ### Changed
 
 - Test suite: replaced an always-true catalogue assertion with real checks and
-  added regression tests for every fix above (244 tests).
+  added regression tests for every fix above (248 tests).
 
 ## [0.1.0] - 2026-11-03
 
@@ -62,7 +69,7 @@ extras that make the client usable offline.
   third-party SDK.
 - `tuik-data` CLI: `fetch` (table/json/csv, `--son-12-ay`, `--key`, `--dataset`),
   `indicators`, `search`, `dims`, `flatten`, `save`, `mcp`.
-- Tests: 244 offline tests (94 %+ branch coverage) including error paths, UTF-8,
+- Tests: 248 offline tests (94 %+ branch coverage) including error paths, UTF-8,
   retries, token renewal, cache expiry and MCP framing; a live smoke test gated by
   `TUIK_LIVE=1`.
 - `scripts/check.sh` gate (ruff lint + format, mypy strict, pytest + coverage),
