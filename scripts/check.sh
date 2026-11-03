@@ -6,8 +6,23 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export PYTHONPATH="${PYTHONPATH:-src}"
-PYTHON="${PYTHON:-python3}"
 COVERAGE_MIN="${COVERAGE_MIN:-85}"
+
+# --- interpreter discovery --------------------------------------------------
+# An explicitly exported PYTHON always wins. Otherwise prefer the project
+# virtualenv (./.venv) and any active virtualenv over the system interpreter,
+# so `bash scripts/check.sh` works without the caller remembering to activate.
+if [ -z "${PYTHON:-}" ]; then
+    if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "${VIRTUAL_ENV}/bin/python" ]; then
+        PYTHON="${VIRTUAL_ENV}/bin/python"
+    elif [ -x ".venv/bin/python" ]; then
+        PYTHON=".venv/bin/python"
+    elif [ -x ".venv/Scripts/python.exe" ]; then
+        PYTHON=".venv/Scripts/python.exe"
+    else
+        PYTHON="python3"
+    fi
+fi
 
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
     echo "error: $PYTHON not found" >&2

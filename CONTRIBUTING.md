@@ -19,7 +19,9 @@ bash scripts/check.sh
 `scripts/check.sh` runs ruff (lint + format check), `mypy --strict`, the whole test
 suite and the 85 % coverage gate. It exits non-zero if anything fails; please run
 it before opening a pull request. Nothing in the default test run touches the
-network.
+network. Activating the venv is optional: the script uses `$PYTHON` when set, then
+an active `$VIRTUAL_ENV`, then `./.venv` (POSIX or Windows layout), and only then
+the system `python3`.
 
 ## Ground rules
 

@@ -146,7 +146,7 @@ class TestAuth:
             make_client(transport).get_dataset(TUFE_FLOW)
 
     def test_error_message_does_not_leak_the_key(self, transport: FakeTransport) -> None:
-        secret = "super-secret-api-key-value"
+        secret = "example/fake/api-key-0000"
         transport.sequence = [HttpResponse(403, secret.encode())]
         client = make_client(transport, api_key=secret)
         with pytest.raises(TuikAuthError) as excinfo:
