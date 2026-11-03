@@ -1,0 +1,57 @@
+{
+  "version": "2.0",
+  "class": "dataset",
+  "label": "TÜFE - ana harcama grupları (örnek fixture, resmî veri değildir)",
+  "source": "Synthetic example fixture for tuik-data tests",
+  "updated": "2025-02-03",
+  "note": ["All numbers in this file are invented for testing and must not be quoted as statistics."],
+  "id": ["TIME_PERIOD", "COICOP"],
+  "size": [3, 3],
+  "role": {
+    "time": ["TIME_PERIOD"],
+    "metric": ["COICOP"]
+  },
+  "dimension": {
+    "TIME_PERIOD": {
+      "label": "Dönem",
+      "category": {
+        "index": {
+          "2024-01": 0,
+          "2024-02": 1,
+          "2024-03": 2
+        },
+        "label": {
+          "2024-01": "2024 Ocak",
+          "2024-02": "2024 Şubat",
+          "2024-03": "2024 Mart"
+        }
+      }
+    },
+    "COICOP": {
+      "label": "Harcama grubu",
+      "category": {
+        "index": {
+          "01": 0,
+          "04": 1,
+          "07": 2
+        },
+        "label": {
+          "01": "Gıda ve Alkolsüz İçecekler",
+          "04": "Konut, Su, Elektrik, Gaz ve Diğer Yakıtlar",
+          "07": "Ulaştırma"
+        },
+        "unit": {
+          "01": {
+            "label": "Endeks",
+            "decimals": 2
+          }
+        }
+      }
+    }
+  },
+  "value": [1000.0, 1120.5, null, 1010.2, 1135.7, 980.1, "..", 1150.0, 990.5],
+  "status": {
+    "2": "p",
+    "6": "c"
+  }
+}

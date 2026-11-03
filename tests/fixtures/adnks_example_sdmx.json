@@ -1,0 +1,71 @@
+{
+  "header": {
+    "id": "fixture-sdmx-json-response",
+    "prepared": "2025-02-03T00:00:00Z",
+    "sender": {"id": "EXAMPLE", "name": "Synthetic fixture, not TÜİK"}
+  },
+  "meta": {"updated": "2025-02-03"},
+  "data": {
+    "dataSets": [
+      {
+        "action": "Information",
+        "series": {
+          "0:0": {
+            "attributes": [0],
+            "observations": {
+              "0": [100.0, [0]],
+              "1": [101.5, [0]],
+              "2": [null, [1]]
+            }
+          },
+          "1:0": {
+            "attributes": [0],
+            "observations": {
+              "0": [50.0, [0]]
+            }
+          }
+        }
+      }
+    ],
+    "structure": {
+      "name": "Synthetic fixture",
+      "dimensions": {
+        "series": [
+          {
+            "id": "CITIES",
+            "name": "İl",
+            "values": [
+              {"id": "TR34", "name": "İstanbul"},
+              {"id": "TR06", "name": "Ankara"}
+            ]
+          },
+          {
+            "id": "SEX",
+            "name": "Cinsiyet",
+            "values": [{"id": "T", "name": "Toplam"}]
+          }
+        ],
+        "observation": [
+          {
+            "id": "TIME_PERIOD",
+            "name": "Dönem",
+            "values": [
+              {"id": "2022", "name": "2022"},
+              {"id": "2023", "name": "2023"},
+              {"id": "2024", "name": "2024"}
+            ]
+          }
+        ]
+      },
+      "attributes": {
+        "observation": [
+          {
+            "id": "OBS_STATUS",
+            "name": "Gözlem durumu",
+            "values": [{"id": "A", "name": "Normal"}, {"id": "P", "name": "Geçici"}]
+          }
+        ]
+      }
+    }
+  }
+}
