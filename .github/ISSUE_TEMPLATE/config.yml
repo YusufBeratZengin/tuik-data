@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: TÜİK Data Portal (API key, dataflow catalogue)
+    url: https://veriportali.tuik.gov.tr
+    about: Generate your SMS-verified API key and browse dataflows here.
+  - name: SDMX Web Service documentation
+    url: https://veriportali.tuik.gov.tr/en/sdmx-web-service-documentation
+    about: Official endpoint, authentication and query documentation.
