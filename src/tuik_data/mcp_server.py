@@ -249,6 +249,10 @@ def handle_request(
             result = _call_tool(name, arguments, active)
         except TuikError as exc:
             result = _text_result({"error": str(exc)}, is_error=True)
+        except Exception as exc:  # keep the stdio loop alive on a tool bug
+            result = _text_result(
+                {"error": f"internal error: {type(exc).__name__}: {exc}"}, is_error=True
+            )
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
     return {
         "jsonrpc": "2.0",

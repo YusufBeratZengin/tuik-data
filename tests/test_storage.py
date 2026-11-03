@@ -107,6 +107,12 @@ class TestQuery:
         with pytest.raises(TuikConfigError, match="only SELECT"):
             store.query("   ")
 
+    def test_cte_prefixed_write_is_refused(self, store: SeriesStore, tufe_dataset: Dataset) -> None:
+        store.save("tufe", tufe_dataset)
+        with pytest.raises(TuikConfigError, match="only SELECT"):
+            store.query("WITH x AS (SELECT 1) DELETE FROM series")
+        assert store.names() == ["tufe"]
+
     def test_nested_select_is_allowed(self, store: SeriesStore, tufe_dataset: Dataset) -> None:
         store.save("tufe", tufe_dataset)
         rows = store.query("SELECT * FROM (SELECT name FROM series)")

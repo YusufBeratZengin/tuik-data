@@ -48,7 +48,8 @@ class TestIndicators:
         payload = json.loads(capsys.readouterr().out)
         codes = [item["code"] for item in payload]
         assert "yi_ufe" in codes
-        assert codes == sorted(codes) or codes  # order = catalogue order
+        assert codes[0] == "tufe_genel"  # catalogue display order
+        assert len(codes) == len(set(codes))
 
 
 class TestSearch:
@@ -209,8 +210,8 @@ class TestFlatten:
         assert "wrote" in capsys.readouterr().out
 
     def test_missing_file(self, capsys: pytest.CaptureFixture[str]) -> None:
-        with pytest.raises(FileNotFoundError):
-            main(["flatten", "nope.json"])
+        assert main(["flatten", "nope.json"]) == 2
+        assert "error:" in capsys.readouterr().err
 
 
 class TestSaveAndMcp:

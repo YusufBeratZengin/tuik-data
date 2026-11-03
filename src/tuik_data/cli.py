@@ -35,7 +35,6 @@ __all__ = ["build_parser", "main", "render_table"]
 LabelMode = Literal["code", "label", "both"]
 
 EXIT_OK = 0
-EXIT_ERROR = 1
 EXIT_TUIK = 2
 
 
@@ -286,6 +285,11 @@ def main(argv: Sequence[str] | None = None, *, client: TuikClient | None = None)
             _emit(dataset, args)
             return EXIT_OK
     except TuikError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_TUIK
+    except OSError as exc:
+        # Missing input file, unwritable --out, unreadable SQLite path: report a
+        # one-line error and the documented exit code instead of a traceback.
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_TUIK
     except KeyboardInterrupt:  # pragma: no cover - interactive only

@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -171,9 +172,13 @@ class TuikClient:
             return None
         if not isinstance(payload, Mapping) or payload.get("url") != url:
             return None
-        saved_at = payload.get("saved_at", 0)
+        try:
+            saved_at = float(payload.get("saved_at", 0))
+        except (TypeError, ValueError):
+            # A hand-edited or truncated cache entry must never break a fetch.
+            return None
         ttl = self.cache_ttl or 0
-        if ttl > 0 and time.time() - float(saved_at) > ttl:
+        if ttl > 0 and time.time() - saved_at > ttl:
             return None
         body = payload.get("body")
         return body.encode("utf-8") if isinstance(body, str) else None
@@ -183,10 +188,15 @@ class TuikClient:
         if path is None:
             return
         try:
+            text = body.decode("utf-8")
+        except UnicodeDecodeError:
+            # The cache stores JSON text; a non-UTF-8 body is served as-is.
+            return
+        try:
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(".tmp")
             temporary.write_text(
-                json.dumps({"url": url, "saved_at": time.time(), "body": body.decode("utf-8")}),
+                json.dumps({"url": url, "saved_at": time.time(), "body": text}),
                 encoding="utf-8",
             )
             temporary.replace(path)
@@ -478,6 +488,14 @@ class TuikClient:
     def _trim_last(self, dataset: Dataset, last_n: int) -> Dataset:
         for dimension in dataset.dimensions:
             if dimension.role == "time" or dimension.id.upper() in _TIME_IDS:
-                codes = sorted(dimension.codes)[-last_n:]
+                # Natural sort keeps "2024-9" before "2024-10"; a plain string
+                # sort would silently return the wrong "newest" window.
+                codes = sorted(dimension.codes, key=_period_key)[-last_n:]
                 return dataset.take(dimension.id, codes)
         raise TuikConfigError(f"cannot apply last_n: {dataset.dimension_ids} has no time dimension")
+
+
+def _period_key(code: str) -> tuple[Any, ...]:
+    """Sort key that compares digit runs numerically and text case-insensitively."""
+    parts = re.split(r"(\d+)", code)
+    return tuple((0, int(part)) if part.isdigit() else (1, part.casefold()) for part in parts)

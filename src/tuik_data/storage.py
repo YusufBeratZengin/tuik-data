@@ -191,11 +191,20 @@ class SeriesStore:
     def query(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
         """Run a read-only SQL query and return rows as dicts.
 
-        Only ``SELECT``/``WITH`` statements are accepted: the store doubles as an
-        offline analysis surface, not as a way to mutate the file behind its back.
+        Only ``SELECT``/``WITH`` statements are accepted *and* the connection is
+        switched to ``query_only`` while the statement runs, so a CTE-prefixed
+        ``DELETE``/``UPDATE`` cannot mutate the file behind the store's back.
         """
         statement = sql.strip().lstrip("(").split(None, 1)
         if not statement or statement[0].upper() not in ("SELECT", "WITH"):
             raise TuikConfigError("only SELECT / WITH queries are allowed")
-        cursor = self._connection.execute(sql, tuple(params))
-        return [dict(row) for row in cursor.fetchall()]
+        self._connection.execute("PRAGMA query_only = ON")
+        try:
+            cursor = self._connection.execute(sql, tuple(params))
+            return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.OperationalError as exc:
+            if "readonly" in str(exc).lower() or "read-only" in str(exc).lower():
+                raise TuikConfigError("only SELECT / WITH queries are allowed") from exc
+            raise
+        finally:
+            self._connection.execute("PRAGMA query_only = OFF")

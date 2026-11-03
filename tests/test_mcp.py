@@ -162,6 +162,19 @@ class TestTools:
         assert response is not None
         assert response["error"]["code"] == -32602
 
+    def test_unexpected_tool_error_is_isolated(self) -> None:
+        class ExplodingClient:
+            def search(self, _query: str) -> list[object]:
+                raise RuntimeError("boom")
+
+        response = handle_request(
+            rpc("tools/call", {"name": "tuik_search", "arguments": {"query": "x"}}),
+            ExplodingClient(),  # type: ignore[arg-type]
+        )
+        assert response is not None
+        assert response["result"]["isError"] is True
+        assert "internal error: RuntimeError: boom" in response["result"]["content"][0]["text"]
+
     def test_bad_params_type(self) -> None:
         response = handle_request(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": "nope"},

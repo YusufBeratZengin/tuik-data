@@ -291,6 +291,25 @@ class TestIndicators:
         assert dataset.size == (2, 3)
         assert dataset.dimensions[0].codes == ("2024-02", "2024-03")
 
+    def test_last_n_orders_periods_numerically(self, transport: FakeTransport) -> None:
+        periods = [f"2024-{month}" for month in range(1, 13)]
+        document = {
+            "class": "dataset",
+            "id": ["TIME_PERIOD"],
+            "size": [12],
+            "dimension": {
+                "TIME_PERIOD": {
+                    "category": {"index": {period: i for i, period in enumerate(periods)}}
+                }
+            },
+            "value": list(range(12)),
+        }
+        transport.routes["format=JSONSTAT"] = json_response(document)
+        dataset = make_client(transport).get_dataset(TUFE_FLOW, last_n=3)
+        # A plain string sort would return 2024-1, 2024-10, 2024-11.
+        assert dataset.dimensions[0].codes == ("2024-10", "2024-11", "2024-12")
+        assert dataset.values == (9, 10, 11)
+
     def test_last_n_rejects_zero(self) -> None:
         with pytest.raises(TuikConfigError, match="positive"):
             make_client().get_indicator("tufe_genel", last_n=0)
@@ -367,6 +386,33 @@ class TestCaching:
         client.get_dataset(TUFE_FLOW)
         client.get_dataset(TUFE_FLOW, use_cache=False)
         assert len(transport.data_calls()) == 2
+
+    def test_cache_timestamp_is_validated(self, transport: FakeTransport, tmp_path: Path) -> None:
+        transport.routes["format=JSONSTAT"] = tufe_response()
+        client = make_client(transport, cache_dir=tmp_path, cache_ttl=60)
+        client.get_dataset(TUFE_FLOW)
+        cache_file = next(tmp_path.glob("*.json"))
+        payload = json.loads(cache_file.read_text(encoding="utf-8"))
+        payload["saved_at"] = "yesterday"
+        cache_file.write_text(json.dumps(payload), encoding="utf-8")
+
+        # A hand-edited entry is ignored, never fatal.
+        assert len(client.get_dataset(TUFE_FLOW)) == 9
+        assert len(transport.data_calls()) == 2
+
+    def test_non_utf8_body_is_served_without_caching(
+        self, transport: FakeTransport, tmp_path: Path
+    ) -> None:
+        body = (
+            b'{"class":"dataset","id":["T"],"size":[1],'
+            b'"dimension":{"T":{"category":{"index":["2024"]}}},"value":[1],"label":"caf\xe9"}'
+        )
+        transport.sequence.append(HttpResponse(200, body))
+        client = make_client(transport, cache_dir=tmp_path, cache_ttl=60)
+
+        dataset = client.get_dataset(TUFE_FLOW)
+        assert dataset.values == (1,)
+        assert list(tmp_path.glob("*.json")) == []
 
 
 class TestOffline:
