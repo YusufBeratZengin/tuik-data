@@ -68,7 +68,7 @@ jobs:
           python -c "import tuik_data; print(tuik_data.__version__)"
           tuik-data flatten "$GITHUB_WORKSPACE/examples/tufe_example.json" --format json > out.json
           test -s out.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
